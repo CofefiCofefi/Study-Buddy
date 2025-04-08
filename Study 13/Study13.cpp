@@ -9,33 +9,6 @@ using namespace std;
 
 #pragma comment(lib, "Ws2_32.lib")
 
-void runServer();
-void runClient();
-
-int main() {
-    WSADATA wsaData;
-    int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-    if (iResult != 0) {
-        cout << "WSAStartup failed: " << iResult << endl;
-        return 1;
-    }
-
-    int userChoice;
-    cout << "Enter 1 to join a group, or 0 to host a group: ";
-    cin >> userChoice;
-    cin.ignore();
-
-    if (userChoice == 0) {
-        runServer();
-    }
-    else if (userChoice == 1) {
-        runClient();
-    }
-
-    WSACleanup();
-    return 0;
-}
-
 void runServer() {
     string name, location, courses;
     vector<string> members;
@@ -46,6 +19,21 @@ void runServer() {
     getline(cin, location);
     cout << "Enter the courses (comma separated): ";
     getline(cin, courses);
+
+    vector<string> courseList;
+    size_t start = 0;
+    size_t end = courses.find(',');
+    while (end != string::npos) {
+        courseList.push_back(courses.substr(start, end - start));
+        start = end + 2;
+        end = courses.find(',', start);
+    }
+    courseList.push_back(courses.substr(start, end));
+
+    string formattedCourses;
+    for (const string& course : courseList) {
+        formattedCourses += course + "\n";
+    }
 
     SOCKET serverSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     sockaddr_in serverAddr{};
@@ -75,7 +63,7 @@ void runServer() {
                 response = string(Study_LOC) + location;
             }
             else if (request == Study_WHAT) {
-                response = string(Study_COURSES) + courses;
+                response = string(Study_COURSES) + formattedCourses;
             }
             else if (request == Study_MEMBERS) {
                 string memberList = "";
@@ -94,7 +82,7 @@ void runServer() {
     closesocket(serverSocket);
 }
 
-void runClient() {
+bool runClient() {
     string username;
     cout << "Enter your name: ";
     getline(cin, username);
@@ -104,7 +92,7 @@ void runClient() {
     int numServers = getServers(clientSocket, servers);
 
     for (int i = 0; i < numServers; i++) {
-        cout << "Group #" << i + 1 << " " << servers[i].name << endl;
+        cout << "Group #" << i + 1 << " " << servers[i].name << "\n";
     }
 
     int choice;
@@ -129,13 +117,16 @@ void runClient() {
         int option;
         cin >> option;
         cin.ignore();
+        cout << "\n";
 
         string message;
         if (option == 0) message = Study_WHERE;
         else if (option == 1) message = Study_WHAT;
         else if (option == 2) message = Study_MEMBERS;
         else if (option == 3) message = string(Study_JOIN) + username;
-        else break;
+        else {
+            return true;
+        };
 
         sendto(clientSocket, message.c_str(), message.length() + 1, 0, (sockaddr*)&serverAddr, addrSize);
 
@@ -143,10 +134,52 @@ void runClient() {
             int recvLen = recvfrom(clientSocket, recvBuf, DEFAULT_BUFLEN, 0, (sockaddr*)&serverAddr, &addrSize);
             if (recvLen > 0) {
                 recvBuf[recvLen] = '\0';
-                cout << "Received: " << recvBuf << endl;
+
+                if (option == 0 && strncmp(recvBuf, Study_LOC, strlen(Study_LOC)) == 0) {
+                    cout << "Location: " << (recvBuf + strlen(Study_LOC)) << "\n\n";
+                }
+                else if (option == 1 && strncmp(recvBuf, Study_COURSES, strlen(Study_COURSES)) == 0) {
+                    cout << "Courses:\n" << (recvBuf + strlen(Study_COURSES)) << endl;
+                }
+                else if (option == 2 && strncmp(recvBuf, Study_MEMLIST, strlen(Study_MEMLIST)) == 0) {
+                    cout << "Members: " << "\n" << (recvBuf + strlen(Study_MEMLIST)) << "\n";
+                }
+                else {
+                    cout << "Received: " << recvBuf << "\n";
+                }
                 if (option == 3) break;
             }
         }
     }
     closesocket(clientSocket);
+    return false;
+}
+
+int main() {
+    WSADATA wsaData;
+    int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (iResult != 0) {
+        cout << "WSAStartup failed: " << iResult << "\n";
+        return 1;
+    }
+
+    bool exit = false;
+    do {
+
+        int userChoice;
+        cout << "Welcome to Study Buddy!" << "\n";
+        cout << "Enter 1 to join a group, or 0 to host a group: ";
+        cin >> userChoice;
+        cin.ignore();
+
+        if (userChoice == 0) {
+            runServer();
+        }
+        else if (userChoice == 1) {
+            exit = runClient();
+        }
+    } while (exit == true);
+
+    WSACleanup();
+    return 0;
 }
