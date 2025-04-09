@@ -91,8 +91,9 @@ bool runClient() {
     SOCKET clientSocket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     int numServers = getServers(clientSocket, servers);
 
-    for (int i = 0; i < numServers; i++) {
-        cout << "Group #" << i + 1 << " " << servers[i].name << "\n";
+    for (int i = 0; i < numServers;) {
+        cout << "Group #" << i + 1 << ": " << servers[i].name << "\n";
+        i++;
     }
 
     int choice;
